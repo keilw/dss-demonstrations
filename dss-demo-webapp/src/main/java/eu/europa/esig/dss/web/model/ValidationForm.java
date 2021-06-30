@@ -6,13 +6,14 @@ import javax.validation.constraints.AssertTrue;
 
 import org.springframework.web.multipart.MultipartFile;
 
+import eu.europa.esig.dss.utils.Utils;
 import eu.europa.esig.dss.validation.executor.ValidationLevel;
 
 public class ValidationForm {
 
 	private MultipartFile signedFile;
 
-	private List<MultipartFile> originalFiles;
+	private List<OriginalFile> originalFiles;
 
 	private ValidationLevel validationLevel;
 
@@ -20,11 +21,17 @@ public class ValidationForm {
 
 	private MultipartFile policyFile;
 	
+	private MultipartFile signingCertificate;
+
+	private List<MultipartFile> adjunctCertificates;
+	
 	private boolean includeCertificateTokens;
 	
 	private boolean includeRevocationTokens;
 	
 	private boolean includeTimestampTokens;
+
+	private boolean includeSemantics;
 
 	public MultipartFile getSignedFile() {
 		return signedFile;
@@ -34,11 +41,11 @@ public class ValidationForm {
 		this.signedFile = signedFile;
 	}
 
-	public List<MultipartFile> getOriginalFiles() {
+	public List<OriginalFile> getOriginalFiles() {
 		return originalFiles;
 	}
 
-	public void setOriginalFiles(List<MultipartFile> originalFiles) {
+	public void setOriginalFiles(List<OriginalFile> originalFiles) {
 		this.originalFiles = originalFiles;
 	}
 
@@ -65,6 +72,22 @@ public class ValidationForm {
 	public void setPolicyFile(MultipartFile policyFile) {
 		this.policyFile = policyFile;
 	}
+
+	public MultipartFile getSigningCertificate() {
+		return signingCertificate;
+	}
+
+	public void setSigningCertificate(MultipartFile signingCertificate) {
+		this.signingCertificate = signingCertificate;
+	}
+
+	public List<MultipartFile> getAdjunctCertificates() {
+		return adjunctCertificates;
+	}
+
+	public void setAdjunctCertificates(List<MultipartFile> adjunctCertificates) {
+		this.adjunctCertificates = adjunctCertificates;
+	}
 	
 	public boolean isIncludeCertificateTokens() {
 		return includeCertificateTokens;
@@ -90,9 +113,32 @@ public class ValidationForm {
 		this.includeTimestampTokens = includeTimestampTokens;
 	}
 
+	public boolean isIncludeSemantics() {
+		return includeSemantics;
+	}
+
+	public void setIncludeSemantics(boolean includeSemantics) {
+		this.includeSemantics = includeSemantics;
+	}
+
 	@AssertTrue(message = "{error.signed.file.mandatory}")
 	public boolean isSignedFile() {
 		return (signedFile != null) && (!signedFile.isEmpty());
+	}
+
+	@AssertTrue(message = "{error.original.file.empty}")
+	public boolean areOriginalFiles() {
+		if (Utils.isCollectionNotEmpty(originalFiles)) {
+			boolean atLeastOneOriginalDoc = false;
+			for (OriginalFile originalDocument : originalFiles) {
+				if (originalDocument.isNotEmpty()) {
+					atLeastOneOriginalDoc = true;
+					break;
+				}
+			}
+			return atLeastOneOriginalDoc;
+		}
+		return true;
 	}
 
 }

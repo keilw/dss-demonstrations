@@ -1,9 +1,9 @@
 package eu.europa.esig.dss.web.controller;
 
-import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.TimeZone;
 
 import javax.servlet.http.HttpServletRequest;
@@ -11,32 +11,30 @@ import javax.validation.Valid;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.propertyeditors.CustomDateEditor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.bind.annotation.InitBinder;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.SessionAttributes;
-import org.springframework.web.multipart.MultipartFile;
 
+import eu.europa.esig.dss.enumerations.TokenExtractionStrategy;
 import eu.europa.esig.dss.model.DSSException;
 import eu.europa.esig.dss.model.x509.CertificateToken;
 import eu.europa.esig.dss.spi.DSSUtils;
 import eu.europa.esig.dss.spi.x509.CertificateSource;
-import eu.europa.esig.dss.spi.x509.CommonCertificateSource;
-import eu.europa.esig.dss.utils.Utils;
 import eu.europa.esig.dss.validation.CertificateValidator;
 import eu.europa.esig.dss.validation.CertificateVerifier;
+import eu.europa.esig.dss.validation.CertificateVerifierBuilder;
 import eu.europa.esig.dss.validation.reports.CertificateReports;
-import eu.europa.esig.dss.web.exception.BadRequestException;
+import eu.europa.esig.dss.web.WebAppUtils;
+import eu.europa.esig.dss.web.model.CertificateForm;
 import eu.europa.esig.dss.web.model.CertificateValidationForm;
-
-
 
 @Controller
 @SessionAttributes({ "simpleReportXml", "detailedReportXml", "diagnosticDataXml" })
@@ -45,11 +43,11 @@ public class CertificateValidationController extends AbstractValidationControlle
 
 	private static final Logger LOG = LoggerFactory.getLogger(CertificateValidationController.class);
 
-	private static final String VALIDATION_TILE = "certificate_validation";
-	private static final String VALIDATION_RESULT_TILE = "validation_result";
-
-	@Autowired
-	private CertificateVerifier certificateVerifier;
+	private static final String VALIDATION_TILE = "certificate-validation";
+	private static final String VALIDATION_RESULT_TILE = "validation-result";
+	
+	private static final String[] ALLOWED_FIELDS = { "certificateForm.certificateFile", "certificateForm.certificateBase64", "certificateChainFiles",
+			"validationTime", "includeCertificateTokens", "includeRevocationTokens" };
 
 	@InitBinder
 	public void initBinder(WebDataBinder webDataBinder) {
@@ -57,6 +55,11 @@ public class CertificateValidationController extends AbstractValidationControlle
 		dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
 		dateFormat.setLenient(false);
 		webDataBinder.registerCustomEditor(Date.class, new CustomDateEditor(dateFormat, true));
+	}
+	
+	@InitBinder
+	public void setAllowedFields(WebDataBinder webDataBinder) {
+		webDataBinder.setAllowedFields(ALLOWED_FIELDS);
 	}
 
 	@RequestMapping(method = RequestMethod.GET)
@@ -68,54 +71,70 @@ public class CertificateValidationController extends AbstractValidationControlle
 	}
 
 	@RequestMapping(method = RequestMethod.POST)
-	public String validate(@ModelAttribute("certValidationForm") @Valid CertificateValidationForm certValidationForm, BindingResult result, Model model) {
+	public String validate(@ModelAttribute("certValidationForm") @Valid CertificateValidationForm certValidationForm, 
+			BindingResult result, Model model, HttpServletRequest request) {
 		if (result.hasErrors()) {
+			if (LOG.isDebugEnabled()) {
+				List<ObjectError> allErrors = result.getAllErrors();
+				for (ObjectError error : allErrors) {
+					LOG.debug(error.getDefaultMessage());
+				}
+			}
 			return VALIDATION_TILE;
 		}
 
-		CertificateToken certificate = getCertificate(certValidationForm.getCertificateFile());
+		CertificateToken certificate = getCertificate(certValidationForm.getCertificateForm());
 
-		List<MultipartFile> certificateChainFiles = certValidationForm.getCertificateChainFiles();
-		if (Utils.isCollectionNotEmpty(certificateChainFiles)) {
-			CertificateSource adjunctCertSource = new CommonCertificateSource();
-			for (MultipartFile file : certificateChainFiles) {
-				CertificateToken certificateChainItem = getCertificate(file);
-				if (certificateChainItem != null) {
-					adjunctCertSource.addCertificate(certificateChainItem);
-				}
-			}
-			certificateVerifier.setAdjunctCertSource(adjunctCertSource);
-		}
+		LOG.trace("Start certificate validation");
 
-		LOG.info("Start certificate validation");
-
-		CertificateVerifier cv = certificateVerifier;
-		cv.setIncludeCertificateTokenValues(certValidationForm.isIncludeCertificateTokens());
-		cv.setIncludeCertificateRevocationValues(certValidationForm.isIncludeRevocationTokens());
-		
 		CertificateValidator certificateValidator = CertificateValidator.fromCertificate(certificate);
-		certificateValidator.setCertificateVerifier(cv);
+		certificateValidator.setCertificateVerifier(getCertificateVerifier(certValidationForm));
+		certificateValidator.setTokenExtractionStrategy(
+				TokenExtractionStrategy.fromParameters(certValidationForm.isIncludeCertificateTokens(), false, certValidationForm.isIncludeRevocationTokens()));
 		certificateValidator.setValidationTime(certValidationForm.getValidationTime());
+
+		Locale locale = request.getLocale();
+		LOG.trace("Requested locale : {}", request.getLocale());
+		if (locale == null) {
+			locale = Locale.getDefault();
+			LOG.warn("The request locale is null! Use the default one : {}", locale);
+		}
+		certificateValidator.setLocale(locale);
 
 		CertificateReports reports = certificateValidator.validate();
 
 		// reports.print();
-
+		
+        model.addAttribute("currentCertificate", certificate.getDSSIdAsString());
 		setAttributesModels(model, reports);
 
 		return VALIDATION_RESULT_TILE;
 	}
-
-	private CertificateToken getCertificate(MultipartFile file) {
-		try {
-			if (file != null && !file.isEmpty()) {
-				return DSSUtils.loadCertificate(file.getBytes());
+	
+	private CertificateToken getCertificate(CertificateForm certificateForm) {
+		CertificateToken certificateToken = WebAppUtils.toCertificateToken(certificateForm.getCertificateFile());
+		if (certificateToken == null) {
+			certificateToken = DSSUtils.loadCertificateFromBase64EncodedString(certificateForm.getCertificateBase64());
+			if (certificateToken == null) {
+				throw new DSSException("Cannot convert base64 to a CertificateToken!");
 			}
-		} catch (DSSException | IOException e) {
-			LOG.warn("Cannot convert file to X509 Certificate", e);
-			throw new BadRequestException("Unsupported certificate format for file '" + file.getOriginalFilename() + "'");
 		}
-		return null;
+		return certificateToken;
+	}
+	
+	private CertificateVerifier getCertificateVerifier(CertificateValidationForm certValidationForm) {
+		CertificateSource adjunctCertSource = WebAppUtils.toCertificateSource(certValidationForm.getCertificateChainFiles());
+	
+		CertificateVerifier cv;
+		if (adjunctCertSource == null) {
+			// reuse the default one
+			cv = certificateVerifier;
+		} else {
+			cv = new CertificateVerifierBuilder(certificateVerifier).buildCompleteCopy();
+			cv.setAdjunctCertSources(adjunctCertSource);
+		}
+		
+		return cv;
 	}
 	
 	@ModelAttribute("displayDownloadPdf")

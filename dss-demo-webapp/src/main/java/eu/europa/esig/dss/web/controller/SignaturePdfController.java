@@ -1,29 +1,5 @@
 package eu.europa.esig.dss.web.controller;
 
-import java.io.ByteArrayInputStream;
-import java.util.Date;
-
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.validation.Valid;
-import javax.xml.bind.DatatypeConverter;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.validation.BindingResult;
-import org.springframework.validation.ObjectError;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.ResponseBody;
-import org.springframework.web.bind.annotation.SessionAttributes;
-
 import eu.europa.esig.dss.enumerations.DigestAlgorithm;
 import eu.europa.esig.dss.enumerations.SignatureForm;
 import eu.europa.esig.dss.enumerations.SignatureLevel;
@@ -40,25 +16,57 @@ import eu.europa.esig.dss.web.model.SignDocumentResponse;
 import eu.europa.esig.dss.web.model.SignatureDocumentForm;
 import eu.europa.esig.dss.web.model.SignatureValueAsString;
 import eu.europa.esig.dss.web.service.SigningService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.ObjectError;
+import org.springframework.web.bind.WebDataBinder;
+import org.springframework.web.bind.annotation.InitBinder;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.SessionAttributes;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.validation.Valid;
+import javax.xml.bind.DatatypeConverter;
+import java.io.ByteArrayInputStream;
+import java.util.Date;
+import java.util.List;
 
 @Controller
 @SessionAttributes(value = { "signaturePdfForm", "signedPdfDocument" })
 @RequestMapping(value = "/sign-a-pdf")
 public class SignaturePdfController {
 
-	private static final Logger logger = LoggerFactory.getLogger(SignaturePdfController.class);
+	private static final Logger LOG = LoggerFactory.getLogger(SignaturePdfController.class);
 
-	private static final String SIGNATURE_PDF_PARAMETERS = "signature-pdf-parameters";
+	private static final String SIGNATURE_PDF_PARAMETERS = "signature-pdf";
 	private static final String SIGNATURE_PROCESS = "nexu-signature-process";
+	
+	private static final String[] ALLOWED_FIELDS = { "documentToSign" };
 
 	@Value("${nexuUrl}")
 	private String nexuUrl;
 
-	@Value("${baseUrl}")
-	private String downloadNexuUrl;
+	@Value("${nexuDownloadUrl}")
+	private String nexuDownloadUrl;
 
 	@Autowired
 	private SigningService signingService;
+	
+	@InitBinder
+	public void setAllowedFields(WebDataBinder webDataBinder) {
+		webDataBinder.setAllowedFields(ALLOWED_FIELDS);
+	}
 
 	@RequestMapping(method = RequestMethod.GET)
 	public String showSignatureParameters(Model model, HttpServletRequest request) {
@@ -71,7 +79,7 @@ public class SignaturePdfController {
 		signaturePdfForm.setSignaturePackaging(SignaturePackaging.ENVELOPED);
 
 		model.addAttribute("signaturePdfForm", signaturePdfForm);
-		model.addAttribute("downloadNexuUrl", downloadNexuUrl);
+		model.addAttribute("nexuDownloadUrl", nexuDownloadUrl);
 		return SIGNATURE_PDF_PARAMETERS;
 	}
 
@@ -79,8 +87,11 @@ public class SignaturePdfController {
 	public String sendSignatureParameters(Model model, HttpServletRequest response,
 			@ModelAttribute("signaturePdfForm") @Valid SignatureDocumentForm signaturePdfForm, BindingResult result) {
 		if (result.hasErrors()) {
-			for (ObjectError error : result.getAllErrors()) {
-				logger.error(error.getDefaultMessage());
+			if (LOG.isDebugEnabled()) {
+				List<ObjectError> allErrors = result.getAllErrors();
+				for (ObjectError error : allErrors) {
+					LOG.debug(error.getDefaultMessage());
+				}
 			}
 			return SIGNATURE_PDF_PARAMETERS;
 		}
@@ -142,9 +153,14 @@ public class SignaturePdfController {
 			Utils.copy(new ByteArrayInputStream(signedDocument.getBytes()), response.getOutputStream());
 
 		} catch (Exception e) {
-			logger.error("An error occurred while pushing file in response : " + e.getMessage(), e);
+			LOG.error("An error occurred while pushing file in response : " + e.getMessage(), e);
 		}
 		return null;
+	}
+
+	@ModelAttribute("isMockUsed")
+	public boolean isMockUsed() {
+		return signingService.isMockTSPSourceUsed();
 	}
 
 }

@@ -15,20 +15,32 @@ import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 @Configuration
 @EnableWebSecurity
 public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
+	
+	/** API urls (REST/SOAP webServices) */
+	private static final String[] API_URLS = new String[] {
+			"/services/rest/**", "/services/soap/**"
+	};
 
 	@Override
 	protected void configure(HttpSecurity http) throws Exception {
-
-		http.csrf().disable();
-
 		// javadoc uses frames
 		http.headers().addHeaderWriter(javadocHeaderWriter());
+		http.headers().addHeaderWriter(svgHeaderWriter());
 		http.headers().addHeaderWriter(serverEsigDSS());
+		
+		http.csrf().ignoringAntMatchers(API_URLS); // disable CSRF for API calls (REST/SOAP webServices)
 	}
 
 	@Bean
 	public HeaderWriter javadocHeaderWriter() {
 		final AntPathRequestMatcher javadocAntPathRequestMatcher = new AntPathRequestMatcher("/apidocs/**");
+		final HeaderWriter hw = new XFrameOptionsHeaderWriter(XFrameOptionsMode.SAMEORIGIN);
+		return new DelegatingRequestMatcherHeaderWriter(javadocAntPathRequestMatcher, hw);
+	}
+
+	@Bean
+	public  HeaderWriter svgHeaderWriter() {
+		final AntPathRequestMatcher javadocAntPathRequestMatcher = new AntPathRequestMatcher("/validation/diag-data.svg");
 		final HeaderWriter hw = new XFrameOptionsHeaderWriter(XFrameOptionsMode.SAMEORIGIN);
 		return new DelegatingRequestMatcherHeaderWriter(javadocAntPathRequestMatcher, hw);
 	}

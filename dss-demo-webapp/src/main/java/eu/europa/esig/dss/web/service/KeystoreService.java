@@ -3,24 +3,18 @@ package eu.europa.esig.dss.web.service;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import eu.europa.esig.dss.enumerations.DigestAlgorithm;
 import eu.europa.esig.dss.model.x509.CertificateToken;
-import eu.europa.esig.dss.spi.x509.KeyStoreCertificateSource;
 import eu.europa.esig.dss.utils.Utils;
 import eu.europa.esig.dss.web.model.CertificateDTO;
 
 @Component
 public class KeystoreService {
 
-	@Autowired
-	private KeyStoreCertificateSource keyStoreCertificateSource;
-
-	public List<CertificateDTO> getCertificatesDTOFromKeyStore() {
-		List<CertificateDTO> list = new ArrayList<>();
-		List<CertificateToken> certificatesFromKeyStore = keyStoreCertificateSource.getCertificates();
+	public List<CertificateDTO> getCertificatesDTOFromKeyStore(List<CertificateToken> certificatesFromKeyStore) {
+		List<CertificateDTO> list = new ArrayList<CertificateDTO>();
 		for (CertificateToken certificateToken : certificatesFromKeyStore) {
 			list.add(getCertificateDTO(certificateToken));
 		}
@@ -31,8 +25,8 @@ public class KeystoreService {
 		CertificateDTO dto = new CertificateDTO();
 
 		dto.setDssId(certificate.getDSSIdAsString());
-		dto.setIssuerName(certificate.getIssuerX500Principal().getName());
-		dto.setSubjetName(certificate.getSubjectX500Principal().getName());
+		dto.setIssuerName(certificate.getIssuer().getPrettyPrintRFC2253());
+		dto.setSubjectName(certificate.getSubject().getPrettyPrintRFC2253());
 		dto.setNotBefore(certificate.getNotBefore());
 		dto.setNotAfter(certificate.getNotAfter());
 
@@ -56,14 +50,6 @@ public class KeystoreService {
 	private String getPrintableHex(byte[] digest) {
 		String hexString = Utils.toHex(digest);
 		return hexString.replaceAll("..", "$0 ");
-	}
-
-	public void addCertificateToKeyStore(CertificateToken certificateToken) {
-		keyStoreCertificateSource.addCertificateToKeyStore(certificateToken);
-	}
-
-	public void deleteCertificateFromKeyStore(String dssId) {
-		keyStoreCertificateSource.deleteCertificateFromKeyStore(dssId);
 	}
 
 }

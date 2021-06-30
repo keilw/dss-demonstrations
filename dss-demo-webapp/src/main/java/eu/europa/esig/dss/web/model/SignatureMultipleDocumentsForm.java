@@ -8,7 +8,7 @@ import javax.validation.constraints.NotNull;
 import org.springframework.web.multipart.MultipartFile;
 
 import eu.europa.esig.dss.enumerations.ASiCContainerType;
-import eu.europa.esig.dss.utils.Utils;
+import eu.europa.esig.dss.web.WebAppUtils;
 
 public class SignatureMultipleDocumentsForm extends AbstractSignatureForm {
 
@@ -35,7 +35,7 @@ public class SignatureMultipleDocumentsForm extends AbstractSignatureForm {
 
 	@AssertTrue(message = "{error.to.sign.files.mandatory}")
 	public boolean isDocumentsToSign() {
-		return Utils.isCollectionNotEmpty(documentsToSign);
+		return WebAppUtils.isCollectionNotEmpty(documentsToSign);
 	}
 
 }
